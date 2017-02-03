@@ -16,6 +16,14 @@ def index():
  
 class View(MethodView):
 
+	def get(self, name=None):
+		location = Location.query.filter_by(name=name).first()
+		res = {
+			'lat':location.lat,
+			'lng':location.lng
+		}
+		return jsonify(res)
+
 	def post(self):
 		name = request.json['name']
 		lat = request.json['lat']
@@ -32,6 +40,9 @@ class View(MethodView):
 view = View.as_view('view')
 app.add_url_rule(
 	'/location', view_func = view, methods=['GET', 'POST']
+	)
+app.add_url_rule(
+	'/location/<string:name>', view_func = view, methods=['GET']
 	)
 
 app.run(debug=True) 
