@@ -2,7 +2,7 @@ import json, base64
 from flask import Flask, request,jsonify, abort
 from flask.views import MethodView
 from flask_restful import reqparse, abort, Api, Resource
-from api import app,db
+from config import app,db
 from model import Location, Users
 from sqlalchemy import Float, column, func, select
 from sqlalchemy.orm import column_property
