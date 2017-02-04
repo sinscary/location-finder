@@ -4,6 +4,8 @@ from flask.views import MethodView
 from flask_restful import reqparse, abort, Api, Resource
 from api import app,db
 from model import Location, Users
+from sqlalchemy import Float, column, func, select
+from sqlalchemy.orm import column_property
 
 api = Api(app)
 @app.route('/')
@@ -23,14 +25,15 @@ class View(MethodView):
 
 	def get(self, name=None):
 		validate_auth()
-		location = Location.query.filter_by(name=name).first()
-		res = {
-			'lat':location.lat,
-			'lng':location.lng
-		}
-		return jsonify(res) #db.func.earth_box(db.func.ll_to_earth(location.lat, location.lng),30)
-		
-
+		loc = Location.query.filter_by(name=name).first()
+		location = Location
+		longitude = loc.lng
+		latitude = loc.lat
+		query = select([location.name]).where(func.earth_box(
+			func.ll_to_earth(location.lat,location.lng), 3000 
+				)).op('@>').func.ll_to_earth(longitude,latitude)
+		result = Location.query.query
+		return result
 	def post(self):
 		validate_auth()
 		name = request.json['name']
