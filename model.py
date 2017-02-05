@@ -23,35 +23,6 @@ class Users(db.Model):
 		self.username = username
 		self.password = password
 
-class Client(db.Model):
-	client_id = db.Column(db.String(40), primary_key=True)
-	client_secret = db.Column(db.String(55), unique=True, index=True,
-					nullable=False)
-	_redirect_uris = db.Column(db.Text)
-	_default_scopes = db.Column(db.Text)
-
-class Grant(db.Model):
-	id = db.Column(db.Integer, primary_key=True)
-	client_id = db.Column(
-        db.String(40), db.ForeignKey('client.client_id'),
-        nullable=False)
-	client = db.relationship('Client')
-	code = db.Column(db.String(255), index=True, nullable=False)
-	redirect_uri = db.Column(db.String(255))
-	expires = db.Column(db.DateTime)
-	_scopes = db.Column(db.Text)
-
-class Token(db.Model):
-	id = db.Column(db.Integer, primary_key=True)
-	client_id = db.Column(
-        db.String(40), db.ForeignKey('client.client_id'),
-        nullable=False)
-	client = db.relationship('Client')
-	token_type = db.Column(db.String(40))
-	access_token = db.Column(db.String(255), unique=True)
-	refresh_token = db.Column(db.String(255), unique=True)
-	expires = db.Column(db.DateTime)
-	_scopes = db.Column(db.Text)
 
 migrate = Migrate(app,db)
 

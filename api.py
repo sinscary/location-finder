@@ -1,70 +1,82 @@
-import json, base64
-from flask_oauthlib.provider import OAuth2Provider
-from flask import Flask, request, jsonify, abort
-from flask.views import MethodView
+import json
+from flask_oauthlib.client import OAuth
+from flask import Flask, request, jsonify, session, url_for
 from flask_restful import abort, Api, Resource
-from model import Location, Users
+from model import Location
 from sqlalchemy import Float, column, func, select, text
 from sqlalchemy.orm import column_property
 from flask_sqlalchemy import SQLAlchemy
 from config import app,db
-oauth = OAuth2Provider(app)
-api = Api(app)
+
+CLIENT_ID = 'IwHI2pT2dhe8yOivHbnXFuBfg2Z6kxXJLJddNx9Z'
+CLIENT_SECRET = 'q7rEbHyCFwIqWEQPNRoJy0nSniJyFZyWD2NQ2ewkz9lgJfRW9m'
+
+oauth = OAuth(app)
+
+remote = oauth.remote_app(
+    'remote',
+    consumer_key = CLIENT_ID,
+    consumer_secret = CLIENT_SECRET,
+    request_token_params={'scope': 'email'},
+    base_url='http://127.0.0.1:5000/api/',
+    request_token_url=None,
+    access_token_url='http://127.0.0.1:5000/oauth/token',
+    authorize_url='http://127.0.0.1:5000/oauth/authorize'
+)
+
 @app.route('/')
 @app.route('/index')
 def index():
-	return "Welcome to location finder"
+	if 'remote oauth' in session:
+		resp = remote.get('user_name')
+		return jsonify(resp.data)
+	next_url = request.args.get('next')
+	return remote.authorize(
+			callback=url_for('authorized', next=next_url, _external=True)
+		)
+
+@app.route('/authorized')
+def authorized():
+    resp = remote.authorized_response()
+    if resp is None:
+        return 'Access denied: reason=%s error=%s' % (
+            request.args['error_reason'],
+            request.args['error_description']
+        )
+
+    session['remote_oauth'] = (resp['access_token'], '')
+    return jsonify(oauth_token=resp['access_token'])
  
-@oauth.usergetter
-def get_user(username, password, *args, **kwargs):
-	user = Users.query.filter_by(username = username).first()
-	if user.check_password(password):
-		return user
-	return None
 
-@app.route('/oauth/authorize', methods=['GET', 'POST'])
-@oauth.authorize_handler
-def authorize(*args, **kwargs):
-	if request.method == 'GET':
-		client_id = kwargs.get('client_id')
-		client = Client.query.filter_by(client_id=client_id).first()
-		kwargs['client'] = client
-		redirect('/location', **kwargs)
+@app.route('/location/<string:name>', methods=['GET'])
+def get(self, name=None):
+	loc = Location.query.filter_by(name=name).first()
+	longitude = loc.lng
+	latitude = loc.lat
 
-	confirm = request.form.get('confirm', 'no')
-	return confirm == 'yes'
-class View(MethodView):
+	query = db.session.query(Location).from_statement(
+		text("SELECT location.lat, location.lng FROM location WHERE earth_box(ll_to_earth(location.lat, location.lng),1000)@>ll_to_earth("+latitude+','+longitude+")")
+		)
 
-	def get(self, name=None):
-		loc = Location.query.filter_by(name=name).first()
-		longitude = loc.lng
-		latitude = loc.lat
+	for locatn in query:
+		return locatn
 
-		query = db.session.query(Location).from_statement(
-			text("SELECT location.lat, location.lng FROM location WHERE earth_box(ll_to_earth(location.lat, location.lng),1000)@>ll_to_earth("+latitude+','+longitude+")")
-			)
+@app.route('/location', methods=['POST'])
+def post():
+	name = request.json['name']
+	lat = request.json['lat']
+	lng = request.json['lng']
+	location = Location(name, lat, lng)
+	db.session.add(location)
+	db.session.commit()
+	return jsonify({location.id:{
+		'name' : location.name,
+		'lat' : location.lat,
+		'lng' : location.lng
+		}})
 
-		for locatn in query:
-			return locatn
-	def post(self):
-		name = request.json['name']
-		lat = request.json['lat']
-		lng = request.json['lng']
-		location = Location(name, lat, lng)
-		db.session.add(location)
-		db.session.commit()
-		return jsonify({location.id:{
-			'name' : location.name,
-			'lat' : location.lat,
-			'lng' : location.lng
-			}})
+@remote.tokengetter
+def get_oauth_token():
+    return session.get('remote_oauth')
 
-view = View.as_view('view')
-app.add_url_rule(
-	'/location', view_func = view, methods=['POST']
-	)
-app.add_url_rule(
-	'/location/<string:name>', view_func = view, methods=['GET']
-	)
-
-app.run(debug=True) 
+app.run(host='localhost', port=8000 ,debug=True) 
